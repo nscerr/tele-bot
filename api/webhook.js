@@ -3,7 +3,7 @@ const axios = require('axios');
 const logger = require('../lib/utils/logger');
 const { detectLinkType } = require('../lib/utils/linkDetector');
 const { sendMessage } = require('../lib/utils/telegram');
-const { extractMedia } = require('../lib/services/downloader');
+const { extractMedia, checkApiHealth } = require('../lib/services/downloader');
 const { uploadMediaUrls } = require('../lib/services/uploader');
 const { sendMedia, getStoredDescription, clearStoredDescription } = require('../lib/services/mediaSender');
 
@@ -191,6 +191,23 @@ module.exports = async (req, res) => {
                 } else {
                     logger.warn({ chatId, userId, command: '/ai', authorized: false, context: 'commandHandler' }, '/ai tanpa otorisasi.');
                     await sendMessage(chatId, '🔒 Perintah ini khusus untuk Owner dan Admin.', null, messageId);
+                }
+
+            } else if (commandText === '/cek') {
+                currentUserState.nonLinkCounter = 0;
+                logger.info({ chatId, command: '/health', context: 'commandHandler' }, '/health command.');
+                await sendMessage(chatId, '⏳ Mengecek status server...', null, messageId);
+
+                const health = await checkApiHealth();
+                if (health.ok) {
+                    const uptimeSeconds = Math.floor(health.uptime);
+                    const hours = Math.floor(uptimeSeconds / 3600);
+                    const minutes = Math.floor((uptimeSeconds % 3600) / 60);
+                    const seconds = uptimeSeconds % 60;
+                    const uptimeStr = `${hours}j ${minutes}m ${seconds}d`;
+                    await sendMessage(chatId, `✅ <b>Server Status: Online</b>\n\n⏱ <b>Uptime:</b> ${uptimeStr}`, null, messageId);
+                } else {
+                    await sendMessage(chatId, '❌ <b>Server Status: Offline</b>\n\nServer downloader sedang tidak aktif. Coba lagi nanti.', null, messageId);
                 }
 
             } else {
