@@ -123,14 +123,8 @@ async function processLink(chatId, messageId, linkInfo) {
         return;
     }
 
-    // Step 2: Upload media ke uguu.se (skip untuk TikTok, langsung pakai URL asli)
-    let uploadedUrls;
-    if (platform === 'tiktok') {
-        logger.info({ ...logContext }, 'TikTok: skip upload uguu.se, pakai URL asli.');
-        uploadedUrls = data;
-    } else {
-        uploadedUrls = await uploadMediaUrls(data, platform);
-    }
+    // Step 2: Upload semua media ke uguu.se (got-scraping bypass CDN anti-bot)
+    const uploadedUrls = await uploadMediaUrls(data, platform);
 
     // Step 3: Kirim media ke Telegram
     await sendMedia(chatId, data, uploadedUrls, platform);
