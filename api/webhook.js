@@ -77,7 +77,7 @@ async function handleCallbackQuery(callbackQuery) {
 
         if (description) {
             try {
-                await sendMessage(targetChatId, `📝 *Deskripsi Lengkap:*\n\n${description}`, { parse_mode: 'Markdown' }, originalMessageId);
+                await sendMessage(targetChatId, description, null, originalMessageId);
                 logger.info({ targetChatId, mediaId, context: 'handleCallbackQuery' }, 'Deskripsi lengkap terkirim.');
                 await answerCallbackQuery(callbackQueryId);
                 clearStoredDescription(targetChatId, mediaId);
