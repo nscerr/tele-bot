@@ -123,8 +123,14 @@ async function processLink(chatId, messageId, linkInfo) {
         return;
     }
 
-    // Step 2: Upload semua media ke uguu.se
-    const uploadedUrls = await uploadMediaUrls(data, platform);
+    // Step 2: Upload media ke uguu.se (skip untuk TikTok, langsung pakai URL asli)
+    let uploadedUrls;
+    if (platform === 'tiktok') {
+        logger.info({ ...logContext }, 'TikTok: skip upload uguu.se, pakai URL asli.');
+        uploadedUrls = data;
+    } else {
+        uploadedUrls = await uploadMediaUrls(data, platform);
+    }
 
     // Step 3: Kirim media ke Telegram
     await sendMedia(chatId, data, uploadedUrls, platform);
@@ -193,7 +199,7 @@ module.exports = async (req, res) => {
                     await sendMessage(chatId, '🔒 Perintah ini khusus untuk Owner dan Admin.', null, messageId);
                 }
 
-            } else if (commandText === '/cek') {
+            } else if (commandText === '/health') {
                 currentUserState.nonLinkCounter = 0;
                 logger.info({ chatId, command: '/health', context: 'commandHandler' }, '/health command.');
                 await sendMessage(chatId, '⏳ Mengecek status server...', null, messageId);
