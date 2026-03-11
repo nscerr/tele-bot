@@ -6,6 +6,7 @@ const { sendMessage } = require('../lib/utils/telegram');
 const { extractMedia, checkApiHealth } = require('../lib/services/downloader');
 const { uploadMediaUrls } = require('../lib/services/uploader');
 const { sendMedia, getStoredDescription, clearStoredDescription } = require('../lib/services/mediaSender');
+const R = require('../lib/utils/responses');
 
 const userState = {};
 const TELEGRAM_API_BASE_URL = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
@@ -43,11 +44,11 @@ async function handleNonLinkOrMediaMessage(chatId, messageId, currentUserState) 
     const counter = currentUserState.nonLinkCounter;
     logger.info({ chatId, messageId, nonLinkCounter: counter, context: 'handleNonLinkOrMediaMessage' }, `Non-link message. Counter: ${counter}`);
 
-    let replyText = '🗿';
+    let replyText = R.NON_LINK_DEFAULT;
     if (counter <= 2) {
-        replyText = 'Linknya mana bro? (FB/TT/X) 🗿';
+        replyText = R.NON_LINK_ASK;
     } else if (counter === 3) {
-        replyText = 'terserah!!🗿';
+        replyText = R.NON_LINK_FED_UP;
     }
     await sendMessage(chatId, replyText, null, messageId);
 }
@@ -83,16 +84,16 @@ async function handleCallbackQuery(callbackQuery) {
                 clearStoredDescription(targetChatId, mediaId);
             } catch (sendError) {
                 logger.error({ err: sendError, targetChatId, mediaId, context: 'handleCallbackQuery' }, 'Error mengirim deskripsi.');
-                await answerCallbackQuery(callbackQueryId, 'Gagal mengirim deskripsi.', true);
+                await answerCallbackQuery(callbackQueryId, R.CB_DESC_FAILED, true);
                 clearStoredDescription(targetChatId, mediaId);
             }
         } else {
             logger.warn({ targetChatId, mediaId, context: 'handleCallbackQuery' }, 'Deskripsi tidak ditemukan.');
-            await answerCallbackQuery(callbackQueryId, 'Deskripsi sudah ditampilkan atau tidak tersedia lagi.');
+            await answerCallbackQuery(callbackQueryId, R.CB_DESC_NOT_FOUND);
         }
     } else {
         logger.warn({ callbackData: data, chatId, context: 'handleCallbackQuery' }, 'Unhandled callback_data.');
-        await answerCallbackQuery(callbackQueryId, 'Aksi tidak dikenal.');
+        await answerCallbackQuery(callbackQueryId, R.CB_UNKNOWN_ACTION);
     }
 }
 
@@ -103,7 +104,7 @@ async function processLink(chatId, messageId, linkInfo) {
     const logContext = { chatId, platform, url, context: 'processLink' };
 
     logger.info(logContext, `Memproses link ${platform}.`);
-    await sendMessage(chatId, '⏳ Tunggu sebentar, sedang diproses...', null, messageId);
+    await sendMessage(chatId, R.PROCESSING, null, messageId);
 
     // Step 1: Extract media dari TFX API
     const result = await extractMedia(platform, url);
@@ -111,7 +112,7 @@ async function processLink(chatId, messageId, linkInfo) {
     if (!result.success || !result.data) {
         const errorMsg = result.errorMessage || 'Gagal mengambil data dari server downloader.';
         logger.error({ ...logContext, errorMsg }, 'Gagal extract media.');
-        await sendMessage(chatId, `❌ ${errorMsg} 🗿`);
+        await sendMessage(chatId, R.EXTRACT_FAILED(errorMsg));
         return;
     }
 
@@ -119,7 +120,7 @@ async function processLink(chatId, messageId, linkInfo) {
     const data = result.data;
     if (!data.linkMp4 && !data.linkHd && (!data.images || data.images.length === 0)) {
         logger.warn({ ...logContext, status: data.status }, 'API sukses tapi tidak ada media.');
-        await sendMessage(chatId, '❌ Tidak ditemukan media yang bisa diunduh dari link tersebut. 🗿');
+        await sendMessage(chatId, R.NO_MEDIA_FOUND);
         return;
     }
 
@@ -176,27 +177,27 @@ module.exports = async (req, res) => {
             if (commandText === '/start') {
                 currentUserState.nonLinkCounter = 0;
                 logger.info({ chatId, command: '/start', context: 'commandHandler' }, '/start command.');
-                await sendMessage(chatId, 'Selamat datang! 👋 Kirimkan saya link video dari Facebook, TikTok, atau Twitter/X!', null, messageId);
+                await sendMessage(chatId, R.CMD_START, null, messageId);
 
             } else if (commandText === '/help') {
                 currentUserState.nonLinkCounter = 0;
                 logger.info({ chatId, command: '/help', context: 'commandHandler' }, '/help command.');
-                await sendMessage(chatId, 'Platform yang didukung saat ini:\n• Facebook\n• TikTok\n• Twitter/X\n\nCara penggunaan:\n1. Salin link video.\n2. Kirim linknya ke saya.\n\nSaya akan coba ambil link unduhannya.', null, messageId);
+                await sendMessage(chatId, R.CMD_HELP, null, messageId);
 
             } else if (commandText === '/ai') {
                 if (OWNER_TELEGRAM_ID && chatId === OWNER_TELEGRAM_ID) {
                     currentUserState.nonLinkCounter = 0;
                     logger.info({ chatId, command: '/ai', authorized: true, context: 'commandHandler' }, '/ai command oleh Owner.');
-                    await sendMessage(chatId, '🤖 Halo Owner! Perintah /ai sedang dalam pengembangan. Apa yang bisa saya bantu?', null, messageId);
+                    await sendMessage(chatId, R.CMD_AI_OWNER, null, messageId);
                 } else {
                     logger.warn({ chatId, userId, command: '/ai', authorized: false, context: 'commandHandler' }, '/ai tanpa otorisasi.');
-                    await sendMessage(chatId, '🔒 Perintah ini khusus untuk Owner dan Admin.', null, messageId);
+                    await sendMessage(chatId, R.CMD_AI_DENIED, null, messageId);
                 }
 
             } else if (commandText === '/health') {
                 currentUserState.nonLinkCounter = 0;
                 logger.info({ chatId, command: '/health', context: 'commandHandler' }, '/health command.');
-                await sendMessage(chatId, '⏳ Mengecek status server...', null, messageId);
+                await sendMessage(chatId, R.CMD_HEALTH_CHECKING, null, messageId);
 
                 const health = await checkApiHealth();
                 if (health.ok) {
@@ -205,9 +206,9 @@ module.exports = async (req, res) => {
                     const minutes = Math.floor((uptimeSeconds % 3600) / 60);
                     const seconds = uptimeSeconds % 60;
                     const uptimeStr = `${hours}j ${minutes}m ${seconds}d`;
-                    await sendMessage(chatId, `✅ <b>Server Status: Online</b>\n\n⏱ <b>Uptime:</b> ${uptimeStr}`, null, messageId);
+                    await sendMessage(chatId, R.CMD_HEALTH_ONLINE(uptimeStr), null, messageId);
                 } else {
-                    await sendMessage(chatId, '❌ <b>Server Status: Offline</b>\n\nServer downloader sedang tidak aktif. Coba lagi nanti.', null, messageId);
+                    await sendMessage(chatId, R.CMD_HEALTH_OFFLINE, null, messageId);
                 }
 
             } else {
@@ -222,7 +223,7 @@ module.exports = async (req, res) => {
                     if (messageText.match(GENERIC_URL_REGEX)) {
                         currentUserState.nonLinkCounter = 0;
                         logger.info({ chatId, context: 'linkHandler_unsupported' }, 'Unsupported URL detected.');
-                        await sendMessage(chatId, '❌ Link tidak didukung.\nPlatform: FB, TT, X.\nInfo /help', null, messageId);
+                        await sendMessage(chatId, R.LINK_UNSUPPORTED, null, messageId);
                     } else {
                         await handleNonLinkOrMediaMessage(chatId, messageId, currentUserState);
                     }
